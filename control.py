@@ -1,4 +1,4 @@
-from math import sin, cos, atan2, acos, pi, tan
+from math import sin, cos, atan2, acos, pi, tan, sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 import meshcat.transformations as tf
@@ -81,6 +81,40 @@ def inverse(x, y, z):
     a2 = acos(np.clip((l2 ** 2 + AC ** 2 - l3 ** 2) / (2 * l2 * AC), -1, 1)) + atan2(z, d - l1)
     a3 = pi - acos(np.clip((l2 ** 2 + l3 ** 2 - AC ** 2) / (2 * l2 * l3), -1, 1))
     return [a1, a2, a3]
+
+
+def al_kashi(a,b,c): 
+    return acos(min(1,max(-1,(b**2 + c**2 - a**2)/(2*b*c)))) 
+
+def inverse_hexapod(x, y, z):
+    """
+    python simulator.py -m inverse -r hexapod
+
+    Le robot est figé en l'air, on ne contrôle qu'une patte
+
+    Reçoit en argument une position cible (x, y, z) pour le bout de la patte, et produit les angles
+    (alpha, beta, gamma) pour que la patte atteigne cet objectif
+
+    - Sliders: la position cible x, y, z du bout de la patte
+    - Entrée: x, y, z, une position cible dans le repère de la patte (mètres), provenant du slider
+    - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
+    """
+    l2h = 49e-3
+    l3h = 64.5e-3 # -60.5 0 22.5 par rapport à l2h
+    l4h = 90.3e-3 # -10 -11.5 89 par rapport à l3h
+
+    d = sqrt(x**2 + y**2)
+    valeur_AC = sqrt((d-l2h)**2 + z**2)
+    teta3 = atan2(z,d-l2h)
+
+    alpha = atan2(y,x)
+
+    beta = al_kashi(l4h,valeur_AC,l3h) + teta3
+
+    gamma = pi - al_kashi(valeur_AC,l4h,l3h)
+
+    return [alpha, beta, gamma]
+
 
 
 def draw(t):
