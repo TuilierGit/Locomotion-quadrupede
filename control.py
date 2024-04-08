@@ -9,17 +9,17 @@ l1, l2, l3, offset = 0.045, 0.065, 0.087, 0.04
 xoffset_3_6 = 0.091
 xoffset_1245 = 0.0305
 yoffset_1245 = 0.0753
-alph1, alph2, alph3, alph4, alph5, alph6 = pi / 3, 2 * pi / 3, pi, 4 * pi / 3, 5 * pi / 3, 0
+alph1, alph2, alph3, alph4, alph5, alph6 = -pi/2, -pi/2, pi, pi/2, pi/2, 0
 
 #  avant arrière (x) 0.091
 #   0.0813 (x:0.0305 y:0.0753)
 
-idles = [np.array([0.13, -0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04]),
-         np.array([-0.13, -0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04]),
-         np.array([0.13, -0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04])
+idles = [np.array([0.13+0.05, 0.13+0.5, -0.08]),
+         np.array([-0.13-0.05, 0.13+0.05, -0.08]),
+         np.array([-0.13, -0.13, -0.08]),
+         np.array([-0.13-0.05, -0.13-0.05, -0.08]),
+         np.array([0.13+0.05, -0.13-0.05, -0.08]),
+         np.array([0.13, 0.13, -0.08])
          ]
 
 air = np.array([0., 0., 0.02])
@@ -201,6 +201,7 @@ def legs(targets_robot):
     x4, y4, z4 = targets_robot[3]
     x5, y5, z5 = targets_robot[4]
     x6, y6, z6 = targets_robot[5]
+
 
     x1 -= xoffset_1245
     x2 += xoffset_1245
