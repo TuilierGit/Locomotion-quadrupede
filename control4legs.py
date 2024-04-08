@@ -1,23 +1,15 @@
-from math import sin, cos, atan2, acos, pi, tan, sqrt
+from math import sin, cos, atan2, acos, pi, tan
 import numpy as np
-from math import sqrt
 import matplotlib.pyplot as plt
 import meshcat.transformations as tf
 
 # Dimensions (mm)
 l1, l2, l3, offset = 0.045, 0.065, 0.087, 0.04
-xoffset_3_6 = 0.091
-xoffset_1245 = 0.0305
-yoffset_1245 = 0.0753
-alph1, alph2, alph3, alph4, alph5, alph6 = pi / 3, 2 * pi / 3, pi, 4 * pi / 3, 5 * pi / 3, 0
+axoffset = offset / 2 ** .5
+alph1, alph2, alph3, alph4 = -3 * pi / 4, 3 * pi / 4, pi / 4, -pi / 4
 
-#  avant arrière (x) 0.091
-#   0.0813 (x:0.0305 y:0.0753)
-
-idles = [np.array([0.13, -0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04]),
+idles = [np.array([-0.13, 0.13, -0.04]),
          np.array([-0.13, -0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04]),
          np.array([0.13, -0.13, -0.04]),
          np.array([0.13, 0.13, -0.04])
          ]
@@ -70,10 +62,6 @@ def direct(alpha, beta, gamma):
     return [x, y, z]
 
 
-def al_kashi(a, b, c):
-    return acos(min(1, max(-1, (b ** 2 + c ** 2 - a ** 2) / (2 * b * c))))
-
-
 def inverse(x, y, z):
     """
     python simulator.py -m inverse
@@ -87,56 +75,13 @@ def inverse(x, y, z):
     - Entrée: x, y, z, une position cible dans le repère de la patte (mètres), provenant du slider
     - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
     """
-    l2h = 49e-3
-    l3h = 64.5e-3  # -60.5 0 22.5 par rapport à l2h
-    l4h = 90.3e-3  # -10 -11.5 89 par rapport à l3h
-    x -= 0.025
-    z += 0.033
-    d = sqrt(x ** 2 + y ** 2)
-    valeur_AC = sqrt((d - l2h) ** 2 + z ** 2)
-    teta3 = atan2(z, d - l2h)
+    a1 = atan2(y, x)
+    d = (x ** 2 + y ** 2) ** .5
+    AC = ((d - l1) ** 2 + z ** 2) ** .5
 
-    alpha = -atan2(y, x)
-
-    beta = al_kashi(l4h, valeur_AC, l3h) + teta3
-
-    gamma = pi / 2 - al_kashi(valeur_AC, l4h, l3h)
-
-    return [alpha, beta, gamma]
-
-
-def al_kashi(a,b,c): 
-    return acos(min(1,max(-1,(b**2 + c**2 - a**2)/(2*b*c)))) 
-
-def inverse_hexapod(x, y, z):
-    """
-    python simulator.py -m inverse -r hexapod
-
-    Le robot est figé en l'air, on ne contrôle qu'une patte
-
-    Reçoit en argument une position cible (x, y, z) pour le bout de la patte, et produit les angles
-    (alpha, beta, gamma) pour que la patte atteigne cet objectif
-
-    - Sliders: la position cible x, y, z du bout de la patte
-    - Entrée: x, y, z, une position cible dans le repère de la patte (mètres), provenant du slider
-    - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
-    """
-    l2h = 49e-3
-    l3h = 64.5e-3 # -60.5 0 22.5 par rapport à l2h
-    l4h = 90.3e-3 # -10 -11.5 89 par rapport à l3h
-
-    d = sqrt(x**2 + y**2)
-    valeur_AC = sqrt((d-l2h)**2 + z**2)
-    teta3 = atan2(z,d-l2h)
-
-    alpha = atan2(y,x)
-
-    beta = al_kashi(l4h,valeur_AC,l3h) + teta3
-
-    gamma = pi - al_kashi(valeur_AC,l4h,l3h)
-
-    return [alpha, beta, gamma]
-
+    a2 = acos(np.clip((l2 ** 2 + AC ** 2 - l3 ** 2) / (2 * l2 * AC), -1, 1)) + atan2(z, d - l1)
+    a3 = pi - acos(np.clip((l2 ** 2 + l3 ** 2 - AC ** 2) / (2 * l2 * l3), -1, 1))
+    return [a1, a2, a3]
 
 
 def draw(t):
@@ -154,7 +99,7 @@ def draw(t):
 
     points = []
     cur_t = 0
-    for _ in range(1):
+    for i in range(1):
         points.append([cur_t] + turn_triangle[0].tolist())
         cur_t += 1
         points.append([cur_t] + turn_triangle[1].tolist())
@@ -176,7 +121,7 @@ def walk_triangle(x_speed, y_speed):
     return point, -point
 
 
-def turn_triangle(turn_speed):
+def turn_triangle(t, turn_speed):
     point = np.array([0., 0., 0.])
     if not np.isclose(turn_speed, 0):
         point[1] += tan(turn_speed * ground_time / 2) * origin_to_idle_ground
@@ -199,30 +144,40 @@ def legs(targets_robot):
     x2, y2, z2 = targets_robot[1]
     x3, y3, z3 = targets_robot[2]
     x4, y4, z4 = targets_robot[3]
-    x5, y5, z5 = targets_robot[4]
-    x6, y6, z6 = targets_robot[5]
 
-    x1 -= xoffset_1245
-    x2 += xoffset_1245
-    x3 += xoffset_3_6
-    x4 += xoffset_1245
-    x5 -= xoffset_1245
-    x6 -= xoffset_3_6
-
-    y1 -= yoffset_1245
-    y2 -= yoffset_1245
-    y4 += yoffset_1245
-    y5 += yoffset_1245
+    # """
+    x1 += axoffset
+    x2 += axoffset
+    x3 -= axoffset
+    x4 -= axoffset
+    y1 -= axoffset
+    y2 += axoffset
+    y3 += axoffset
+    y4 -= axoffset
 
     target1 = [x1 * cos(alph1) - y1 * sin(alph1), x1 * sin(alph1) + y1 * cos(alph1), z1]
     target2 = [x2 * cos(alph2) - y2 * sin(alph2), x2 * sin(alph2) + y2 * cos(alph2), z2]
     target3 = [x3 * cos(alph3) - y3 * sin(alph3), x3 * sin(alph3) + y3 * cos(alph3), z3]
-    target4 = [x4 * cos(alph4) - y4 * sin(alph4), x4 * sin(alph4) + y4 * cos(alph4), z4]
-    target5 = [x5 * cos(alph5) - y5 * sin(alph5), x5 * sin(alph5) + y5 * cos(alph5), z5]
-    target6 = [x6 * cos(alph6) - y6 * sin(alph6), x6 * sin(alph6) + y6 * cos(alph6), z6]
+    target4 = [x4 * cos(alph4) - y4 * sin(alph4), x4 * sin(alph4) + y4 * cos(alph4), z4]  # """
 
-    return inverse(*target1) + inverse(*target2) + inverse(*target3) + inverse(*target4) + inverse(*target5) + inverse(
-        *target6)
+    """
+    targets_robot = np.array([[x, y, z] for x, y, z in targets_robot])
+
+    offsets = np.array([[axoffset, -axoffset, -axoffset, axoffset],
+                    [-axoffset, axoffset, axoffset, -axoffset]])
+
+    targets_robot[:2] += offsets
+    targets_robot[2:] -= offsets
+
+    rot_matrices = [tf.rotation_matrix(alph, [0, 0, 1])[:3, :3] for alph in [alph1, alph2, alph3, alph4]]
+
+    rotated_targets = np.zeros_like(targets_robot)
+    for i in range(len(rot_matrices)):
+        rotated_targets[i] = np.dot(rot_matrices[i], targets_robot[i])
+    #"""
+
+    return inverse(*target1) + inverse(*target2) + inverse(*target3) + inverse(*target4)
+    # return inverse(*rotated_targets[0]) + inverse(*rotated_targets[1]) + inverse(*rotated_targets[2]) + inverse(*rotated_targets[3])
 
 
 def walk(t, speed_x, speed_y, speed_rotation):
@@ -237,7 +192,10 @@ def walk(t, speed_x, speed_y, speed_rotation):
     - Sortie: un tableau contenant les 12 positions angulaires cibles (radian) pour les moteurs
     """
     trans_point1, trans_point2 = walk_triangle(speed_x, speed_y)
-    turn_point1, turn_point2 = turn_triangle(speed_rotation)
+    """if not np.isclose(speed_x+1, 1) or not np.isclose(speed_y+1, 1):
+        trans_point1[2] += -0.04
+        trans_point2[2] += -0.04"""
+    turn_point1, turn_point2 = turn_triangle(t, speed_rotation)
     trans_points = []
     turn_points = []
     cur_t = 0
@@ -262,11 +220,9 @@ def walk(t, speed_x, speed_y, speed_rotation):
     rot2 = np.array([[cos(alph2), sin(alph2), 0], [-sin(alph2), cos(alph2), 0], [0, 0, 0]]) @ group2_turn
     rot3 = np.array([[cos(alph3), sin(alph3), 0], [-sin(alph3), cos(alph3), 0], [0, 0, 0]]) @ group1_turn
     rot4 = np.array([[cos(alph4), sin(alph4), 0], [-sin(alph4), cos(alph4), 0], [0, 0, 0]]) @ group2_turn
-    rot5 = np.array([[cos(alph5), sin(alph5), 0], [-sin(alph5), cos(alph5), 0], [0, 0, 0]]) @ group1_turn
-    rot6 = np.array([[cos(alph6), sin(alph6), 0], [-sin(alph6), cos(alph6), 0], [0, 0, 0]]) @ group2_turn
 
     return legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
-                 group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6])
+                 group2_trans + idles[3] + rot4])
 
 
 def interpolate(values, t):
