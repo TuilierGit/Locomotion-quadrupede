@@ -14,18 +14,18 @@ alph1, alph2, alph3, alph4, alph5, alph6 = -pi/2, -pi/2, pi, pi/2, pi/2, 0
 #  avant arrière (x) 0.091
 #   0.0813 (x:0.0305 y:0.0753)
 
-idles = [np.array([0.13+0.05, 0.13+0.5, -0.08]),
-         np.array([-0.13-0.05, 0.13+0.05, -0.08]),
-         np.array([-0.13, -0.13, -0.08]),
-         np.array([-0.13-0.05, -0.13-0.05, -0.08]),
-         np.array([0.13+0.05, -0.13-0.05, -0.08]),
-         np.array([0.13, 0.13, -0.08])
+idles = [np.array([0.1, 0.21, -0.08]),
+         np.array([-0.1, 0.21, -0.08]),
+         np.array([-0.25, 0, -0.08]),
+         np.array([-0.1, -0.21, -0.08]),
+         np.array([0.1, -0.21, -0.08]),
+         np.array([0.25, 0, -0.08])
          ]
 
 air = np.array([0., 0., 0.02])
 origin_to_idle_ground = (2 * 0.13 ** 2) ** .5
 radius = 0.05
-ground_time = 0.5
+ground_time = 0.25
 
 
 def sandbox(t):
@@ -179,7 +179,7 @@ def walk_triangle(x_speed, y_speed):
 def turn_triangle(turn_speed):
     point = np.array([0., 0., 0.])
     if not np.isclose(turn_speed, 0):
-        point[1] += tan(turn_speed * ground_time / 2) * origin_to_idle_ground
+        point[1] += tan(turn_speed * ground_time / 1) * origin_to_idle_ground
 
     return point, -point
 
