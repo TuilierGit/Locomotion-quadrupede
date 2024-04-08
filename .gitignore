@@ -3,3 +3,5 @@ models
 install_tmp.sh
 simulator.py
 __init__.py
+*.zip
+profil_robotique/
