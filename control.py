@@ -6,14 +6,19 @@ import meshcat.transformations as tf
 
 # Dimensions (mm)
 l1, l2, l3, offset = 0.045, 0.065, 0.087, 0.04
-axoffset = offset / 2 ** .5
-alph1, alph2, alph3, alph4, alph5, alph6 = 0, pi / 3, 2 * pi / 3, pi, 4 * pi / 3, 5 * pi / 3
+xoffset_3_6 = 0.091
+xoffset_1245 = 0.0305
+yoffset_1245 = 0.0753
+alph1, alph2, alph3, alph4, alph5, alph6 = pi / 3, 2 * pi / 3, pi, 4 * pi / 3, 5 * pi / 3, 0
 
-idles = [np.array([-0.13, 0.13, -0.04]),
+#  avant arrière (x) 0.091
+#   0.0813 (x:0.0305 y:0.0753)
+
+idles = [np.array([0.13, -0.13, -0.04]),
+         np.array([0.13, 0.13, -0.04]),
          np.array([-0.13, -0.13, -0.04]),
+         np.array([0.13, 0.13, -0.04]),
          np.array([0.13, -0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04]),
-         np.array([0.13, 0.13, -0.04]),
          np.array([0.13, 0.13, -0.04])
          ]
 
@@ -64,8 +69,10 @@ def direct(alpha, beta, gamma):
     z = yp
     return [x, y, z]
 
-def al_kashi(a,b,c):
-    return acos(min(1,max(-1,(b**2 + c**2 - a**2)/(2*b*c))))
+
+def al_kashi(a, b, c):
+    return acos(min(1, max(-1, (b ** 2 + c ** 2 - a ** 2) / (2 * b * c))))
+
 
 def inverse(x, y, z):
     """
@@ -83,16 +90,17 @@ def inverse(x, y, z):
     l2h = 49e-3
     l3h = 64.5e-3  # -60.5 0 22.5 par rapport à l2h
     l4h = 90.3e-3  # -10 -11.5 89 par rapport à l3h
-
+    x -= 0.025
+    z += 0.033
     d = sqrt(x ** 2 + y ** 2)
     valeur_AC = sqrt((d - l2h) ** 2 + z ** 2)
     teta3 = atan2(z, d - l2h)
 
-    alpha = atan2(y, x)
+    alpha = -atan2(y, x)
 
     beta = al_kashi(l4h, valeur_AC, l3h) + teta3
 
-    gamma = pi - al_kashi(valeur_AC, l4h, l3h)
+    gamma = pi / 2 - al_kashi(valeur_AC, l4h, l3h)
 
     return [alpha, beta, gamma]
 
@@ -160,28 +168,27 @@ def legs(targets_robot):
     x5, y5, z5 = targets_robot[4]
     x6, y6, z6 = targets_robot[5]
 
-    x1 += axoffset  # To be changed
-    x2 += axoffset
-    x3 -= axoffset
-    x4 -= axoffset
-    x5 -= axoffset
-    x6 -= axoffset
-    y1 -= axoffset
-    y2 += axoffset
-    y3 += axoffset
-    y4 -= axoffset
-    y5 -= axoffset
-    y6 -= axoffset
+    x1 -= xoffset_1245
+    x2 += xoffset_1245
+    x3 += xoffset_3_6
+    x4 += xoffset_1245
+    x5 -= xoffset_1245
+    x6 -= xoffset_3_6
+
+    y1 -= yoffset_1245
+    y2 -= yoffset_1245
+    y4 += yoffset_1245
+    y5 += yoffset_1245
 
     target1 = [x1 * cos(alph1) - y1 * sin(alph1), x1 * sin(alph1) + y1 * cos(alph1), z1]
     target2 = [x2 * cos(alph2) - y2 * sin(alph2), x2 * sin(alph2) + y2 * cos(alph2), z2]
     target3 = [x3 * cos(alph3) - y3 * sin(alph3), x3 * sin(alph3) + y3 * cos(alph3), z3]
     target4 = [x4 * cos(alph4) - y4 * sin(alph4), x4 * sin(alph4) + y4 * cos(alph4), z4]
-    target5 = [x4 * cos(alph5) - y4 * sin(alph5), x4 * sin(alph5) + y4 * cos(alph5), z4]
-    target6 = [x4 * cos(alph6) - y4 * sin(alph6), x4 * sin(alph6) + y4 * cos(alph6), z4]
+    target5 = [x5 * cos(alph5) - y5 * sin(alph5), x5 * sin(alph5) + y5 * cos(alph5), z5]
+    target6 = [x6 * cos(alph6) - y6 * sin(alph6), x6 * sin(alph6) + y6 * cos(alph6), z6]
 
-    return inverse(*target1) + inverse(*target2) + inverse(*target3) + inverse(*target4) + inverse(*target5) + inverse(*target6)
-
+    return inverse(*target1) + inverse(*target2) + inverse(*target3) + inverse(*target4) + inverse(*target5) + inverse(
+        *target6)
 
 
 def walk(t, speed_x, speed_y, speed_rotation):
