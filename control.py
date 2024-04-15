@@ -1,8 +1,11 @@
 from math import sin, cos, atan2, acos, pi, tan, sqrt
+import threading
 import numpy as np
 from math import sqrt
 import matplotlib.pyplot as plt
 import meshcat.transformations as tf
+import termios
+import tty
 
 #---------------------------------------------
 import time
@@ -73,7 +76,7 @@ def send_angles(angles):
     d = {
         "31" : 0,
         "32" : 1,
-        "33" : 2,
+        "1" : 2,
         "21" : 3,
         "22" : 4,
         "23" : 5,
@@ -81,7 +84,8 @@ def send_angles(angles):
         "12" : 7,
         "13" : 8,
         "61" : 9,
-        "62" : 10,        "63" : 11,
+        "62" : 10,        
+        "63" : 11,
         "51" : 12,
         "52" : 13,
         "53" : 14,
@@ -90,7 +94,6 @@ def send_angles(angles):
         "43" : 17
     }
     for id in ids:
-        # if id==12 or id==22 or id==32 or id==42 or id==52
         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, angles[d[str(id)]])
 
         
@@ -382,53 +385,43 @@ def interpolate3d(values, t):
     Z = [(e[0], e[3]) for e in values]
     return interpolate(X, t), interpolate(Y, t), interpolate(Z, t)
 
-
+def detect_keypress():
+    global key
+    while True:
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            key = sys.stdin.read(1)
+            if key == 'z':
+                walk(time.time(), 0.1, 0, 0)
+            elif key == 's':
+                walk(time.time(), -0.1, 0, 0)
+            elif key == 'q':
+                walk(time.time(), 0, 0.1, 0)
+            elif key == 'd':
+                walk(time.time(), 0, -0.1, 0)
+            elif key == 'a':
+                walk(time.time(), 0, 0, 0.1)
+            elif key == 'e':
+                walk(time.time(), 0, 0, -0.1)
+            elif key == 'r':
+                for id in ids: 
+                    packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
+            elif key == 'x':
+                break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 if __name__ == "__main__":
     print("N'exécutez pas ce fichier, mais simulator.py")
     if enable_real:
-        for id in ids: 
-            packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
-        time.sleep(0.1)
-    while True:
-        walk(time.time(), 0, 0, 0)
-        #pass
-    #     d = {
-    #     "31" : 0,
-    #     "32" : 1,
-    #     "33" : 2,
-    #     "21" : 3,
-    #     "22" : 4,
-    #     "23" : 5,
-    #     "11" : 6,
-    #     "12" : 7,
-    #     "13" : 8,
-    #     "61" : 9,
-    #     "62" : 10,
-    #     "63" : 11,
-    #     "51" : 12,
-    #     "52" : 13,
-    #     "53" : 14,
-    #     "41" : 15,
-    #     "42" : 16,
-    #     "43" : 17
-    # }
-    #     for id in ids:
-    #         print(id)
-    #         # if id==12 or 22:
-    #         # if id==13 or id==23 or id==33 or id==43 or id==53 or id==63:
-    #         #     packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 400)
-    #         #     time.sleep(0.5)
-    #         # else:
-    #         #     if id==12 or id==22:
-    #         #         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 400)
-    #         #         time.sleep(0.5)
-    #         #     else:
-    #         #         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 600)
-    #         #         time.sleep(0.5)
-    #         # # else:
-    #         #     packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 600)
-    #         #     time.sleep(0.5)
-    #         # if id==12 or id==22 or id==33 or id==43 or id==53 or id==63:
-    #         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
+        while True:
+            for id in ids: 
+                packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
+            time.sleep(0.1)
+    # while True:
+    #     walk(time.time(), 0, 0, -0.2)
+    # key = None
+    # threading.Thread(target=detect_keypress).start()
 
 
