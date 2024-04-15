@@ -4,6 +4,32 @@ from math import sqrt
 import matplotlib.pyplot as plt
 import meshcat.transformations as tf
 
+#---------------------------------------------
+import time
+from dynamixel_sdk import *
+
+enable_real = True
+if enable_real:
+    portHandler = PortHandler("/dev/ttyUSB1")
+    packetHandler = PacketHandler(1.0)
+
+    portHandler.openPort()
+    portHandler.setBaudRate(1000000)
+
+    ADDR_GOAL_POSITION = 30
+
+    ids = []
+    for id in range(0, 100):
+        model_number, result, error = packetHandler.ping(portHandler, id)
+        if model_number == 12:
+            print(f"Found AX-12 with id: {id}")
+            ids.append(id)
+    print("Found motors:")
+    print(ids)
+    for id in ids:
+            packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
+#---------------------------------------------
+
 # Dimensions (mm)
 l1, l2, l3, offset = 0.045, 0.065, 0.087, 0.04
 xoffset_3_6 = 0.091
@@ -13,13 +39,17 @@ alph1, alph2, alph3, alph4, alph5, alph6 = -pi/2, -pi/2, pi, pi/2, pi/2, 0
 
 #  avant arrière (x) 0.091
 #   0.0813 (x:0.0305 y:0.0753)
+idle_z = -0.08
 
-idles = [np.array([0.1, 0.21, -0.08]),
-         np.array([-0.1, 0.21, -0.08]),
-         np.array([-0.25, 0, -0.08]),
-         np.array([-0.1, -0.21, -0.08]),
-         np.array([0.1, -0.21, -0.08]),
-         np.array([0.25, 0, -0.08])
+idle_x_1245 = 0.07
+idle_y_1245 = 0.18
+idle_x_36 = 0.22
+idles = [np.array([idle_x_1245, idle_y_1245, idle_z]),
+         np.array([-idle_x_1245, idle_y_1245, idle_z]),
+         np.array([-idle_x_36, 0, idle_z]),
+         np.array([-idle_x_1245, -idle_y_1245, idle_z]),
+         np.array([idle_x_1245, -idle_y_1245, idle_z]),
+         np.array([idle_x_36, 0, idle_z])
          ]
 
 air = np.array([0., 0., 0.02])
@@ -27,6 +57,43 @@ origin_to_idle_ground = (2 * 0.13 ** 2) ** .5
 radius = 0.05
 ground_time = 0.25
 
+enable_print = False
+
+
+def map_angles(values, from_low=pi, from_high=-pi, to_low=0, to_high=1023):
+
+    values = [value-2*bool((i-1)%3<=1)*value for i, value in enumerate(values)] # Calcule les opposés des angles des moteurs 2 et 3 de chaque patte
+
+    mapped_angles=[]
+    for value in values:
+        mapped_angles+=[int((value - from_low) * (to_high - to_low) / (from_high - from_low) + to_low)]
+    return mapped_angles
+
+def send_angles(angles):
+    d = {
+        "31" : 0,
+        "32" : 1,
+        "33" : 2,
+        "21" : 3,
+        "22" : 4,
+        "23" : 5,
+        "11" : 6,
+        "12" : 7,
+        "13" : 8,
+        "61" : 9,
+        "62" : 10,        "63" : 11,
+        "51" : 12,
+        "52" : 13,
+        "53" : 14,
+        "41" : 15,
+        "42" : 16,
+        "43" : 17
+    }
+    for id in ids:
+        # if id==12 or id==22 or id==32 or id==42 or id==52
+        packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, angles[d[str(id)]])
+
+        
 
 def sandbox(t):
     """
@@ -70,8 +137,6 @@ def direct(alpha, beta, gamma):
     return [x, y, z]
 
 
-def al_kashi(a, b, c):
-    return acos(min(1, max(-1, (b ** 2 + c ** 2 - a ** 2) / (2 * b * c))))
 
 
 def inverse(x, y, z):
@@ -195,7 +260,7 @@ def walk_triangle(x_speed, y_speed):
 
 def turn_triangle(turn_speed):
     point = np.array([0., 0., 0.])
-    if not np.isclose(turn_speed, 0):
+    if not np.isclose(turn_speed+1, 1):
         point[1] += tan(turn_speed * ground_time / 1) * origin_to_idle_ground
 
     return point, -point
@@ -283,8 +348,16 @@ def walk(t, speed_x, speed_y, speed_rotation):
     rot5 = np.array([[cos(alph5), sin(alph5), 0], [-sin(alph5), cos(alph5), 0], [0, 0, 0]]) @ group1_turn
     rot6 = np.array([[cos(alph6), sin(alph6), 0], [-sin(alph6), cos(alph6), 0], [0, 0, 0]]) @ group2_turn
 
-    return legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
+    if enable_print:
+        print(legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
+                 group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6]))
+    angles = legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
                  group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6])
+    mapped = map_angles(angles)
+    if enable_real:
+        send_angles(mapped)
+        #send_angles(angles)
+    return angles
 
 
 def interpolate(values, t):
@@ -312,3 +385,50 @@ def interpolate3d(values, t):
 
 if __name__ == "__main__":
     print("N'exécutez pas ce fichier, mais simulator.py")
+    if enable_real:
+        for id in ids: 
+            packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
+        time.sleep(0.1)
+    while True:
+        walk(time.time(), 0, 0, 0)
+        #pass
+    #     d = {
+    #     "31" : 0,
+    #     "32" : 1,
+    #     "33" : 2,
+    #     "21" : 3,
+    #     "22" : 4,
+    #     "23" : 5,
+    #     "11" : 6,
+    #     "12" : 7,
+    #     "13" : 8,
+    #     "61" : 9,
+    #     "62" : 10,
+    #     "63" : 11,
+    #     "51" : 12,
+    #     "52" : 13,
+    #     "53" : 14,
+    #     "41" : 15,
+    #     "42" : 16,
+    #     "43" : 17
+    # }
+    #     for id in ids:
+    #         print(id)
+    #         # if id==12 or 22:
+    #         # if id==13 or id==23 or id==33 or id==43 or id==53 or id==63:
+    #         #     packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 400)
+    #         #     time.sleep(0.5)
+    #         # else:
+    #         #     if id==12 or id==22:
+    #         #         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 400)
+    #         #         time.sleep(0.5)
+    #         #     else:
+    #         #         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 600)
+    #         #         time.sleep(0.5)
+    #         # # else:
+    #         #     packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 600)
+    #         #     time.sleep(0.5)
+    #         # if id==12 or id==22 or id==33 or id==43 or id==53 or id==63:
+    #         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
+
+
