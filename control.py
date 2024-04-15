@@ -87,22 +87,39 @@ def inverse(x, y, z):
     - Entrée: x, y, z, une position cible dans le repère de la patte (mètres), provenant du slider
     - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
     """
-    l2h = 49e-3
+    """l2h = 49e-3
     l3h = 64.5e-3  # -60.5 0 22.5 par rapport à l2h
-    l4h = 90.3e-3  # -10 -11.5 89 par rapport à l3h
-    x -= 0.025
-    z += 0.033
-    d = sqrt(x ** 2 + y ** 2)
-    valeur_AC = sqrt((d - l2h) ** 2 + z ** 2)
-    teta3 = atan2(z, d - l2h)
+    l4h = 90.3e-3  # -10 -11.5 89 par rapport à l3h"""
+    """x -= 0.025
+    z += 0.033"""
+    l1x = 0.0558
+    #l1z = -0.04
+    #l1z = -0.031/2
+    l1z = -0.016
+    l2x = 0.068
+    #l2z = -0.0253
+    l2z = -0.0229
+    l3x = 0.014
+    # l3z = -0.097
+    l3z = -0.093
+    l2h = sqrt(l1x**2 + l1z**2)
+    l3h = sqrt(l2x**2 + l2z**2)
+    l4h = sqrt(l3x**2 + l3z**2)
 
     alpha = -atan2(y, x)
+    d = sqrt(x ** 2 + y ** 2)
+    z -= l1z
+
+    # x -= l1x
+    valeur_AC = sqrt((d-l1x) ** 2 + z ** 2)
+
+    teta3 = atan2(z, d-l1x)
 
     beta = al_kashi(l4h, valeur_AC, l3h) + teta3
 
-    gamma = pi / 2 - al_kashi(valeur_AC, l4h, l3h)
+    gamma = pi - al_kashi(valeur_AC, l4h, l3h)
 
-    return [alpha, beta, gamma]
+    return [alpha, beta-atan2(l2z, l2x), gamma+atan2(l3z, l3x)]
 
 
 def draw(t):
