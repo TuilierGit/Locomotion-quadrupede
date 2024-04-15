@@ -402,9 +402,9 @@ def detect_keypress():
             elif key == 'd':
                 walk(time.time(), 0, -0.1, 0)
             elif key == 'a':
-                walk(time.time(), 0, 0, 0.1)
+                walk(time.time(), 0, 0, 0.2)
             elif key == 'e':
-                walk(time.time(), 0, 0, -0.1)
+                walk(time.time(), 0, 0, -0.2)
             elif key == 'r':
                 for id in ids: 
                     packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
@@ -414,14 +414,14 @@ def detect_keypress():
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 if __name__ == "__main__":
     print("N'exécutez pas ce fichier, mais simulator.py")
-    if enable_real:
-        while True:
-            for id in ids: 
-                packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
-            time.sleep(0.1)
+    # if enable_real:
+    #     while True:
+    #         for id in ids: 
+    #             packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
+    #         time.sleep(0.1)
     # while True:
     #     walk(time.time(), 0, 0, -0.2)
-    # key = None
-    # threading.Thread(target=detect_keypress).start()
+    key = None
+    threading.Thread(target=detect_keypress).start()
 
 
