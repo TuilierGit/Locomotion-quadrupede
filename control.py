@@ -7,11 +7,13 @@ import meshcat.transformations as tf
 import termios
 import tty
 
-#---------------------------------------------
+# ---------------------------------------------
 import time
 from dynamixel_sdk import *
 
 enable_real = True
+enable_print = False
+
 if enable_real:
     portHandler = PortHandler("/dev/ttyUSB1")
     packetHandler = PacketHandler(1.0)
@@ -27,23 +29,22 @@ if enable_real:
         if model_number == 12:
             print(f"Found AX-12 with id: {id}")
             ids.append(id)
-    print("Found motors:")
-    print(ids)
+    print("Found motors: {}".format(ids))
     for id in ids:
-            packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
-#---------------------------------------------
+        packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
+# ---------------------------------------------
 
 # Dimensions (mm)
-l1, l2, l3, offset = 0.045, 0.065, 0.087, 0.04
+l1, l2, l3 = 0.045, 0.065, 0.087  # Utilisés pour direct()
 xoffset_3_6 = 0.091
 xoffset_1245 = 0.0305
 yoffset_1245 = 0.0753
-alph1, alph2, alph3, alph4, alph5, alph6 = -pi/2, -pi/2, pi, pi/2, pi/2, 0
 
-#  avant arrière (x) 0.091
-#   0.0813 (x:0.0305 y:0.0753)
+# Angle de repos de chaque patte 
+alph1, alph2, alph3, alph4, alph5, alph6 = -pi / 2, -pi / 2, pi, pi / 2, pi / 2, 0
+
+# Positions de repos pour chaque patte
 idle_z = -0.08
-
 idle_x_1245 = 0.07
 idle_y_1245 = 0.18
 idle_x_36 = 0.22
@@ -60,43 +61,41 @@ origin_to_idle_ground = (2 * 0.13 ** 2) ** .5
 radius = 0.05
 ground_time = 0.25
 
-enable_print = False
-
 
 def map_angles(values, from_low=pi, from_high=-pi, to_low=0, to_high=1023):
+    values = [value - 2 * bool((i - 1) % 3 <= 1) * value for i, value in
+              enumerate(values)]  # Calcule les opposés des angles des moteurs 2 et 3 de chaque patte
 
-    values = [value-2*bool((i-1)%3<=1)*value for i, value in enumerate(values)] # Calcule les opposés des angles des moteurs 2 et 3 de chaque patte
-
-    mapped_angles=[]
+    mapped_angles = []
     for value in values:
-        mapped_angles+=[int((value - from_low) * (to_high - to_low) / (from_high - from_low) + to_low)]
+        mapped_angles += [int((value - from_low) * (to_high - to_low) / (from_high - from_low) + to_low)]
     return mapped_angles
+
 
 def send_angles(angles):
     d = {
-        "31" : 0,
-        "32" : 1,
-        "1" : 2,
-        "21" : 3,
-        "22" : 4,
-        "23" : 5,
-        "11" : 6,
-        "12" : 7,
-        "13" : 8,
-        "61" : 9,
-        "62" : 10,        
-        "63" : 11,
-        "51" : 12,
-        "52" : 13,
-        "53" : 14,
-        "41" : 15,
-        "42" : 16,
-        "43" : 17
+        "31": 0,
+        "32": 1,
+        "1": 2,
+        "21": 3,
+        "22": 4,
+        "23": 5,
+        "11": 6,
+        "12": 7,
+        "13": 8,
+        "61": 9,
+        "62": 10,
+        "63": 11,
+        "51": 12,
+        "52": 13,
+        "53": 14,
+        "41": 15,
+        "42": 16,
+        "43": 17
     }
     for id in ids:
         packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, angles[d[str(id)]])
 
-        
 
 def sandbox(t):
     """
@@ -118,6 +117,7 @@ def sandbox(t):
     return targets
 
 
+# Ne fonctionne certainement pas
 def direct(alpha, beta, gamma):
     """
     python simulator.py -m direct
@@ -140,8 +140,6 @@ def direct(alpha, beta, gamma):
     return [x, y, z]
 
 
-
-
 def inverse(x, y, z):
     """
     python simulator.py -m inverse
@@ -155,43 +153,31 @@ def inverse(x, y, z):
     - Entrée: x, y, z, une position cible dans le repère de la patte (mètres), provenant du slider
     - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
     """
-    """l2h = 49e-3
-    l3h = 64.5e-3  # -60.5 0 22.5 par rapport à l2h
-    l4h = 90.3e-3  # -10 -11.5 89 par rapport à l3h"""
-    """x -= 0.025
-    z += 0.033"""
     l1x = 0.0558
-    #l1z = -0.04
-    #l1z = -0.031/2
     l1z = -0.016
     l2x = 0.068
-    #l2z = -0.0253
     l2z = -0.0229
     l3x = 0.014
-    # l3z = -0.097
     l3z = -0.093
-    l2h = sqrt(l1x**2 + l1z**2)
-    l3h = sqrt(l2x**2 + l2z**2)
-    l4h = sqrt(l3x**2 + l3z**2)
+    l3h = sqrt(l2x ** 2 + l2z ** 2)
+    l4h = sqrt(l3x ** 2 + l3z ** 2)
 
     alpha = -atan2(y, x)
     d = sqrt(x ** 2 + y ** 2)
     z -= l1z
 
-    # x -= l1x
-    valeur_AC = sqrt((d-l1x) ** 2 + z ** 2)
+    AC = sqrt((d - l1x) ** 2 + z ** 2)
 
-    teta3 = atan2(z, d-l1x)
+    teta3 = atan2(z, d - l1x)
+    beta = al_kashi(l4h, AC, l3h) + teta3
+    gamma = pi - al_kashi(AC, l4h, l3h)
 
-    beta = al_kashi(l4h, valeur_AC, l3h) + teta3
-
-    gamma = pi - al_kashi(valeur_AC, l4h, l3h)
-
-    return [alpha, beta-atan2(l2z, l2x), gamma+atan2(l3z, l3x)]
+    return [alpha, beta - atan2(l2z, l2x), gamma + atan2(l3z, l3x)]
 
 
-def al_kashi(a,b,c): 
-    return acos(min(1,max(-1,(b**2 + c**2 - a**2)/(2*b*c)))) 
+def al_kashi(a, b, c):
+    return acos(min(1, max(-1, (b ** 2 + c ** 2 - a ** 2) / (2 * b * c))))
+
 
 def inverse_hexapod(x, y, z):
     """
@@ -207,21 +193,17 @@ def inverse_hexapod(x, y, z):
     - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
     """
     l2h = 49e-3
-    l3h = 64.5e-3 # -60.5 0 22.5 par rapport à l2h
-    l4h = 90.3e-3 # -10 -11.5 89 par rapport à l3h
+    l3h = 64.5e-3  # -60.5 0 22.5 par rapport à l2h
+    l4h = 90.3e-3  # -10 -11.5 89 par rapport à l3h
 
-    d = sqrt(x**2 + y**2)
-    valeur_AC = sqrt((d-l2h)**2 + z**2)
-    teta3 = atan2(z,d-l2h)
+    d = sqrt(x ** 2 + y ** 2)
+    AC = sqrt((d - l2h) ** 2 + z ** 2)
+    teta3 = atan2(z, d - l2h)
 
-    alpha = atan2(y,x)
-
-    beta = al_kashi(l4h,valeur_AC,l3h) + teta3
-
-    gamma = pi - al_kashi(valeur_AC,l4h,l3h)
-
+    alpha = atan2(y, x)
+    beta = al_kashi(l4h, AC, l3h) + teta3
+    gamma = pi - al_kashi(AC, l4h, l3h)
     return [alpha, beta, gamma]
-
 
 
 def draw(t):
@@ -236,20 +218,7 @@ def draw(t):
     - Entrée: t, le temps (secondes écoulées depuis le début)
     - Sortie: un tableau contenant les 3 positions angulaires cibles (en radians)
     """
-
-    points = []
-    cur_t = 0
-    for _ in range(1):
-        points.append([cur_t] + turn_triangle[0].tolist())
-        cur_t += 1
-        points.append([cur_t] + turn_triangle[1].tolist())
-        cur_t += .5
-        points.append([cur_t] + turn_triangle[2].tolist())
-        cur_t += .5
-        points.append([cur_t] + turn_triangle[0].tolist())
-
-    x, y, z = interpolate3d(points, t % 2)
-    return inverse(x, y, z)
+    pass
 
 
 def walk_triangle(x_speed, y_speed):
@@ -263,7 +232,7 @@ def walk_triangle(x_speed, y_speed):
 
 def turn_triangle(turn_speed):
     point = np.array([0., 0., 0.])
-    if not np.isclose(turn_speed+1, 1):
+    if not np.isclose(turn_speed + 1, 1):
         point[1] += tan(turn_speed * ground_time / 1) * origin_to_idle_ground
 
     return point, -point
@@ -286,7 +255,6 @@ def legs(targets_robot):
     x4, y4, z4 = targets_robot[3]
     x5, y5, z5 = targets_robot[4]
     x6, y6, z6 = targets_robot[5]
-
 
     x1 -= xoffset_1245
     x2 += xoffset_1245
@@ -322,28 +290,34 @@ def walk(t, speed_x, speed_y, speed_rotation):
             speed_x, speed_y, et speed_rotation, vitesses cibles contrôlées par les sliders
     - Sortie: un tableau contenant les 12 positions angulaires cibles (radian) pour les moteurs
     """
-    trans_point1, trans_point2 = walk_triangle(speed_x, speed_y)
-    turn_point1, turn_point2 = turn_triangle(speed_rotation)
-    trans_points = []
-    turn_points = []
+    # Trans is for walking, turn is for turning
+    trans_point1, trans_point2 = walk_triangle(speed_x, speed_y)  #  Calculates the 2 ground points to reach in order to walk in the referential of one leg
+    turn_point1, turn_point2 = turn_triangle(speed_rotation)  #  Calculates the 2 ground points to reach in order to turn in the referential of one leg
+    trans_points, turn_points = [], []  # The ground points in order to walk and turn for one leg
+
     cur_t = 0
     trans_points.append([cur_t] + trans_point1.tolist())
     turn_points.append([cur_t] + turn_point1.tolist())
+
     cur_t += ground_time
     trans_points.append([cur_t] + trans_point2.tolist())
     turn_points.append([cur_t] + turn_point2.tolist())
+
     cur_t += ground_time / 2
     trans_points.append([cur_t] + air.tolist())
     turn_points.append([cur_t] + np.zeros(3).tolist())
+
     cur_t += ground_time / 2
     trans_points.append([cur_t] + trans_point1.tolist())
     turn_points.append([cur_t] + turn_point1.tolist())
 
+    # Make the two groups out of phase (one group in the air while the other on the ground)
     group1_trans = interpolate3d(trans_points, t % (2 * ground_time))
     group2_trans = interpolate3d(trans_points, (t + ground_time) % (2 * ground_time))
     group1_turn = interpolate3d(turn_points, t % (2 * ground_time))
     group2_turn = interpolate3d(turn_points, (t + ground_time) % (2 * ground_time))
 
+    # The turn points need to be rotated for each leg
     rot1 = np.array([[cos(alph1), sin(alph1), 0], [-sin(alph1), cos(alph1), 0], [0, 0, 0]]) @ group1_turn
     rot2 = np.array([[cos(alph2), sin(alph2), 0], [-sin(alph2), cos(alph2), 0], [0, 0, 0]]) @ group2_turn
     rot3 = np.array([[cos(alph3), sin(alph3), 0], [-sin(alph3), cos(alph3), 0], [0, 0, 0]]) @ group1_turn
@@ -351,15 +325,14 @@ def walk(t, speed_x, speed_y, speed_rotation):
     rot5 = np.array([[cos(alph5), sin(alph5), 0], [-sin(alph5), cos(alph5), 0], [0, 0, 0]]) @ group1_turn
     rot6 = np.array([[cos(alph6), sin(alph6), 0], [-sin(alph6), cos(alph6), 0], [0, 0, 0]]) @ group2_turn
 
-    if enable_print:
-        print(legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
-                 group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6]))
+    # Compute the angles given the points for each leg at time t
     angles = legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
-                 group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6])
+                   group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6])
+    if enable_print:
+        print(angles)
     mapped = map_angles(angles)
     if enable_real:
         send_angles(mapped)
-        #send_angles(angles)
     return angles
 
 
@@ -385,6 +358,7 @@ def interpolate3d(values, t):
     Z = [(e[0], e[3]) for e in values]
     return interpolate(X, t), interpolate(Y, t), interpolate(Z, t)
 
+
 def detect_keypress():
     global key
     while True:
@@ -406,12 +380,14 @@ def detect_keypress():
             elif key == 'e':
                 walk(time.time(), 0, 0, -0.2)
             elif key == 'r':
-                for id in ids: 
+                for id in ids:
                     packetHandler.write2ByteTxOnly(portHandler, id, ADDR_GOAL_POSITION, 512)
             elif key == 'x':
                 break
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
 if __name__ == "__main__":
     print("N'exécutez pas ce fichier, mais simulator.py")
     # if enable_real:
@@ -423,5 +399,3 @@ if __name__ == "__main__":
     #     walk(time.time(), 0, 0, -0.2)
     key = None
     threading.Thread(target=detect_keypress).start()
-
-
