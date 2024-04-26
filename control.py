@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import meshcat.transformations as tf
 import termios
 import tty
+import pygame
+from enum import Enum
 
 # ---------------------------------------------
 import time
@@ -13,25 +15,23 @@ from dynamixel_sdk import *
 
 enable_real = True
 enable_print = False
+portHandler = None
+packetHandler = None
+usb_port = ["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2"]
+is_running = True
 
-if enable_real:
-    portHandler = PortHandler("/dev/ttyUSB1")
-    packetHandler = PacketHandler(1.0)
+class Speed(Enum):
+    SLOW = 0.5
+    MEDIUM = 1
+    FAST = 1.5
 
-    portHandler.openPort()
-    portHandler.setBaudRate(1000000)
+current_speed = Speed.SLOW
 
-    ADDR_GOAL_POSITION = 30
+class Height(Enum):
+    MAX_HEIGHT = -0.14
+    MIN_HEIGHT = -0.07
+    DEFAULT = -0.08
 
-    ids = []
-    for id in range(0, 100):
-        model_number, result, error = packetHandler.ping(portHandler, id)
-        if model_number == 12:
-            print(f"Found AX-12 with id: {id}")
-            ids.append(id)
-    print("Found motors: {}".format(ids))
-    for id in ids:
-        packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
 # ---------------------------------------------
 
 # Dimensions (mm)
@@ -44,7 +44,7 @@ yoffset_1245 = 0.0753
 alph1, alph2, alph3, alph4, alph5, alph6 = -pi / 2, -pi / 2, pi, pi / 2, pi / 2, 0
 
 # Positions de repos pour chaque patte
-idle_z = -0.08
+idle_z = Height.DEFAULT.value
 idle_x_1245 = 0.07
 idle_y_1245 = 0.18
 idle_x_36 = 0.22
@@ -61,6 +61,15 @@ origin_to_idle_ground = (2 * 0.13 ** 2) ** .5
 radius = 0.05
 ground_time = 0.25
 
+def update_idle():
+    global idles
+    idles = [np.array([idle_x_1245, idle_y_1245, idle_z]),
+         np.array([-idle_x_1245, idle_y_1245, idle_z]),
+         np.array([-idle_x_36, 0, idle_z]),
+         np.array([-idle_x_1245, -idle_y_1245, idle_z]),
+         np.array([idle_x_1245, -idle_y_1245, idle_z]),
+         np.array([idle_x_36, 0, idle_z])
+         ]
 
 def map_angles(values, from_low=pi, from_high=-pi, to_low=0, to_high=1023):
     values = [value - 2 * bool((i - 1) % 3 <= 1) * value for i, value in
@@ -358,6 +367,20 @@ def interpolate3d(values, t):
     Z = [(e[0], e[3]) for e in values]
     return interpolate(X, t), interpolate(Y, t), interpolate(Z, t)
 
+def idle():
+    """
+    Moves the robot to its idle position.
+    """
+    # Define the idle positions for each leg
+    update_idle()
+    idle_angles = legs([idles[0], idles[1], idles[2], idles[3], idles[4], idles[5]])
+
+    # Map angles to servo positions
+    mapped_angles = map_angles(idle_angles)
+
+    # Send the angles to the servos
+    send_angles(mapped_angles)
+
 
 def detect_keypress():
     global key
@@ -387,7 +410,127 @@ def detect_keypress():
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
+def scale_value(value, old_min, old_max, new_min, new_max):
+    # Scale the value from the old range to the new range
+    old_range = old_max - old_min
+    new_range = new_max - new_min
+    scaled_value = (((value - old_min) * new_range) / old_range) + new_min
+    
+    return scaled_value
+ 
+def ps3_walk():
+    global current_speed
+    global idle_z
+    pygame.init()
+    pygame.joystick.init()
 
+    joystick_count = pygame.joystick.get_count()
+
+    if joystick_count == 0:
+        print("No joystick detected")
+        exit()
+
+    print(f"Detected {joystick_count} joystick(s)")
+
+    joystick = pygame.joystick.Joystick(0)
+    joystick.init()
+    current_motion = None
+    height_up = False
+    height_down = False
+    while True:
+        if pygame.joystick.get_count() == 0:
+            print("Joystick is disconnected - Exiting...")
+            exit()
+
+        for event in pygame.event.get():
+            if event.type == pygame.JOYBUTTONDOWN:
+                button = event.button
+                if button == 1:
+                    print("start position")
+                    for id in ids:
+                        packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
+                    time.sleep(0.1)
+                elif button == 9:
+                    print("Exit program")
+                    exit()
+                elif button == 7:
+                    height_up = True
+                    # time.sleep(0.1)
+
+                elif button == 6:
+                    height_down = True
+                    # time.sleep(0.1)
+            
+                elif button == 13:
+                    if current_speed == Speed.SLOW:
+                        current_speed = Speed.MEDIUM
+                        print("Speed medium")
+                    elif current_speed == Speed.MEDIUM:
+                        current_speed = Speed.FAST
+                        print("Speed fast")
+                    elif current_speed == Speed.FAST:
+                        print("Speed at maximum")
+
+                elif button == 14:
+                    if current_speed == Speed.FAST:
+                        current_speed = Speed.MEDIUM
+                        print("Speed medium")
+                    elif current_speed == Speed.MEDIUM:
+                        current_speed = Speed.SLOW
+                        print("Speed slow")
+                    elif current_speed == Speed.SLOW:
+                        print("Speed at minimum")
+            elif event.type == pygame.JOYBUTTONUP:
+                button = event.button
+                if button == 7:
+                    height_up = False
+                elif button == 6:
+                    height_down = False
+                    
+            elif event.type == pygame.JOYAXISMOTION:
+                x = joystick.get_axis(0)
+                y = -joystick.get_axis(1)
+                r = joystick.get_axis(3)
+                current_motion = [x, y, r]
+
+        if height_up:
+            upgrade = 0.01
+            if (idle_z - upgrade) >= Height.MAX_HEIGHT.value:
+                idle_z = round((idle_z - upgrade), 3)
+                print(f"Five to the Sky - Height at {abs(idle_z)}")
+                idle()
+                # time.sleep(0.01)
+            else:
+                print(f"Maximum height: {abs(Height.MAX_HEIGHT.value)}")
+                # time.sleep(0.1)
+
+        if height_down:
+            downgrade = 0.01
+            if (idle_z + downgrade) <= Height.MIN_HEIGHT.value:
+                idle_z = round((idle_z + downgrade), 3)
+                print(f"Four to the Floor - Height at {abs(idle_z)}")
+                idle()
+                # time.sleep(0.05)
+            else:
+                print(f"Minimun height: {abs(Height.MIN_HEIGHT.value)}")
+                # time.sleep(0.1)
+
+        if current_motion is not None:
+            x, y, r = current_motion
+            # print(f"x: {x}, y: {y}, r: {r}")
+            if round(x, 1) == 0 and round(y, 1) == 0 and (round(r, 2) < 0.2 and round(r,2) > -0.2):
+                pass
+            else:
+                #map joystick values to the range [-0.1, 0.1] and adapt speed
+                x = x * 0.1 * current_speed.value
+                y = y * 0.1 * current_speed.value
+                r = r * 0.1 * 2 * current_speed.value
+                walk(time.time(), x, y, r)
+        
+
+
+
+    
 if __name__ == "__main__":
     print("N'exécutez pas ce fichier, mais simulator.py")
     # if enable_real:
@@ -397,5 +540,42 @@ if __name__ == "__main__":
     #         time.sleep(0.1)
     # while True:
     #     walk(time.time(), 0, 0, -0.2)
-    key = None
-    threading.Thread(target=detect_keypress).start()
+
+    if enable_real:
+        for index, port in enumerate(usb_port):
+            try:
+                portHandler = PortHandler(port)
+                portHandler.openPort()
+                portHandler.setBaudRate(1000000)
+                packetHandler = PacketHandler(1.0)
+            except:
+                if index == len(usb_port)-1 :
+                    print("None of the ports are connected")
+                    exit()
+                else:
+                    print(f"port {port} failed to connect")
+                    pass
+            else:
+                print(f"port {port} connected")
+                break
+            
+
+    ADDR_GOAL_POSITION = 30
+
+    ids = []
+    for id in range(0, 100):
+        model_number, result, error = packetHandler.ping(portHandler, id)
+        if model_number == 12:
+            print(f"Found AX-12 with id: {id}")
+            ids.append(id)
+    print("Found motors: {}".format(ids))
+    if ids == []:
+        print("No motors found")
+        exit()
+    # for id in ids:
+    #     packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
+    
+    # key = None
+    # threading.Thread(target=detect_keypress).start()
+    ps3_walk()
+
