@@ -20,17 +20,32 @@ packetHandler = None
 usb_port = ["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2"]
 is_running = True
 
+
 class Speed(Enum):
     SLOW = 0.5
     MEDIUM = 1
     FAST = 1.5
 
-current_speed = Speed.SLOW
 
 class Height(Enum):
     MAX_HEIGHT = -0.14
     MIN_HEIGHT = -0.07
     DEFAULT = -0.08
+
+
+current_speed = Speed.SLOW
+
+# For the crab rave mode
+DANCE_MODE = False
+
+
+def enable_dance():
+    DANCE_MODE = True
+
+
+def disable_dance():
+    DANCE_MODE = False
+
 
 # ---------------------------------------------
 
@@ -41,7 +56,7 @@ xoffset_1245 = 0.0305
 yoffset_1245 = 0.0753
 
 # Angle de repos de chaque patte 
-alph1, alph2, alph3, alph4, alph5, alph6 = -pi / 2, -pi / 2, pi, pi / 2, pi / 2, 0
+alph1, alph2, alph3, alph4, alph5, alph6 = -pi / 3, -pi / 3, pi, pi / 3, pi / 3, 0
 
 # Positions de repos pour chaque patte
 idle_z = Height.DEFAULT.value
@@ -61,15 +76,17 @@ origin_to_idle_ground = (2 * 0.13 ** 2) ** .5
 radius = 0.05
 ground_time = 0.25
 
+
 def update_idle():
     global idles
     idles = [np.array([idle_x_1245, idle_y_1245, idle_z]),
-         np.array([-idle_x_1245, idle_y_1245, idle_z]),
-         np.array([-idle_x_36, 0, idle_z]),
-         np.array([-idle_x_1245, -idle_y_1245, idle_z]),
-         np.array([idle_x_1245, -idle_y_1245, idle_z]),
-         np.array([idle_x_36, 0, idle_z])
-         ]
+             np.array([-idle_x_1245, idle_y_1245, idle_z]),
+             np.array([-idle_x_36, 0, idle_z]),
+             np.array([-idle_x_1245, -idle_y_1245, idle_z]),
+             np.array([idle_x_1245, -idle_y_1245, idle_z]),
+             np.array([idle_x_36, 0, idle_z])
+             ]
+
 
 def map_angles(values, from_low=pi, from_high=-pi, to_low=0, to_high=1023):
     values = [value - 2 * bool((i - 1) % 3 <= 1) * value for i, value in
@@ -299,44 +316,70 @@ def walk(t, speed_x, speed_y, speed_rotation):
             speed_x, speed_y, et speed_rotation, vitesses cibles contrôlées par les sliders
     - Sortie: un tableau contenant les 12 positions angulaires cibles (radian) pour les moteurs
     """
-    # Trans is for walking, turn is for turning
-    trans_point1, trans_point2 = walk_triangle(speed_x, speed_y)  #  Calculates the 2 ground points to reach in order to walk in the referential of one leg
-    turn_point1, turn_point2 = turn_triangle(speed_rotation)  #  Calculates the 2 ground points to reach in order to turn in the referential of one leg
-    trans_points, turn_points = [], []  # The ground points in order to walk and turn for one leg
 
-    cur_t = 0
-    trans_points.append([cur_t] + trans_point1.tolist())
-    turn_points.append([cur_t] + turn_point1.tolist())
+    if DANCE_MODE:
+        # Trans is for walking, turn is for turning
+        trans_point1, trans_point2 = walk_triangle(1,
+                                                   0)  # Calculates the 2 ground points to reach in order to walk in the referential of one leg
+        trans_points = []  # The ground points in order to walk and turn for one leg
 
-    cur_t += ground_time
-    trans_points.append([cur_t] + trans_point2.tolist())
-    turn_points.append([cur_t] + turn_point2.tolist())
+        cur_t = 0
+        trans_points.append([cur_t] + trans_point1.tolist())
 
-    cur_t += ground_time / 2
-    trans_points.append([cur_t] + air.tolist())
-    turn_points.append([cur_t] + np.zeros(3).tolist())
+        cur_t += ground_time
+        trans_points.append([cur_t] + trans_point2.tolist())
 
-    cur_t += ground_time / 2
-    trans_points.append([cur_t] + trans_point1.tolist())
-    turn_points.append([cur_t] + turn_point1.tolist())
+        cur_t += ground_time / 2
+        trans_points.append([cur_t] + air.tolist())
 
-    # Make the two groups out of phase (one group in the air while the other on the ground)
-    group1_trans = interpolate3d(trans_points, t % (2 * ground_time))
-    group2_trans = interpolate3d(trans_points, (t + ground_time) % (2 * ground_time))
-    group1_turn = interpolate3d(turn_points, t % (2 * ground_time))
-    group2_turn = interpolate3d(turn_points, (t + ground_time) % (2 * ground_time))
+        cur_t += ground_time / 2
+        trans_points.append([cur_t] + trans_point1.tolist())
 
-    # The turn points need to be rotated for each leg
-    rot1 = np.array([[cos(alph1), sin(alph1), 0], [-sin(alph1), cos(alph1), 0], [0, 0, 0]]) @ group1_turn
-    rot2 = np.array([[cos(alph2), sin(alph2), 0], [-sin(alph2), cos(alph2), 0], [0, 0, 0]]) @ group2_turn
-    rot3 = np.array([[cos(alph3), sin(alph3), 0], [-sin(alph3), cos(alph3), 0], [0, 0, 0]]) @ group1_turn
-    rot4 = np.array([[cos(alph4), sin(alph4), 0], [-sin(alph4), cos(alph4), 0], [0, 0, 0]]) @ group2_turn
-    rot5 = np.array([[cos(alph5), sin(alph5), 0], [-sin(alph5), cos(alph5), 0], [0, 0, 0]]) @ group1_turn
-    rot6 = np.array([[cos(alph6), sin(alph6), 0], [-sin(alph6), cos(alph6), 0], [0, 0, 0]]) @ group2_turn
+        group_trans = interpolate3d(trans_points, t % (2 * ground_time))
 
-    # Compute the angles given the points for each leg at time t
-    angles = legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
-                   group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6])
+        angles = legs([group_trans + idles[0], group_trans + idles[1], group_trans + idles[2],
+                       group_trans + idles[3], group_trans + idles[4], group_trans + idles[5]])
+    else:
+        # Trans is for walking, turn is for turning
+        trans_point1, trans_point2 = walk_triangle(speed_x,
+                                                   speed_y)  # Calculates the 2 ground points to reach in order to walk in the referential of one leg
+        turn_point1, turn_point2 = turn_triangle(
+            speed_rotation)  # Calculates the 2 ground points to reach in order to turn in the referential of one leg
+        trans_points, turn_points = [], []  # The ground points in order to walk and turn for one leg
+
+        cur_t = 0
+        trans_points.append([cur_t] + trans_point1.tolist())
+        turn_points.append([cur_t] + turn_point1.tolist())
+
+        cur_t += ground_time
+        trans_points.append([cur_t] + trans_point2.tolist())
+        turn_points.append([cur_t] + turn_point2.tolist())
+
+        cur_t += ground_time / 2
+        trans_points.append([cur_t] + air.tolist())
+        turn_points.append([cur_t] + np.zeros(3).tolist())
+
+        cur_t += ground_time / 2
+        trans_points.append([cur_t] + trans_point1.tolist())
+        turn_points.append([cur_t] + turn_point1.tolist())
+
+        # Make the two groups out of phase (one group in the air while the other on the ground)
+        group1_trans = interpolate3d(trans_points, t % (2 * ground_time))
+        group2_trans = interpolate3d(trans_points, (t + ground_time) % (2 * ground_time))
+        group1_turn = interpolate3d(turn_points, t % (2 * ground_time))
+        group2_turn = interpolate3d(turn_points, (t + ground_time) % (2 * ground_time))
+
+        # The turn points need to be rotated for each leg
+        rot1 = np.array([[cos(alph1), sin(alph1), 0], [-sin(alph1), cos(alph1), 0], [0, 0, 0]]) @ group1_turn
+        rot2 = np.array([[cos(alph2), sin(alph2), 0], [-sin(alph2), cos(alph2), 0], [0, 0, 0]]) @ group2_turn
+        rot3 = np.array([[cos(alph3), sin(alph3), 0], [-sin(alph3), cos(alph3), 0], [0, 0, 0]]) @ group1_turn
+        rot4 = np.array([[cos(alph4), sin(alph4), 0], [-sin(alph4), cos(alph4), 0], [0, 0, 0]]) @ group2_turn
+        rot5 = np.array([[cos(alph5), sin(alph5), 0], [-sin(alph5), cos(alph5), 0], [0, 0, 0]]) @ group1_turn
+        rot6 = np.array([[cos(alph6), sin(alph6), 0], [-sin(alph6), cos(alph6), 0], [0, 0, 0]]) @ group2_turn
+
+        # Compute the angles given the points for each leg at time t
+        angles = legs([group1_trans + idles[0] + rot1, group2_trans + idles[1] + rot2, group1_trans + idles[2] + rot3,
+                    group2_trans + idles[3] + rot4, group1_trans + idles[4] + rot5, group2_trans + idles[5] + rot6])
     if enable_print:
         print(angles)
     mapped = map_angles(angles)
@@ -366,6 +409,7 @@ def interpolate3d(values, t):
     Y = [(e[0], e[2]) for e in values]
     Z = [(e[0], e[3]) for e in values]
     return interpolate(X, t), interpolate(Y, t), interpolate(Z, t)
+
 
 def idle():
     """
@@ -410,14 +454,16 @@ def detect_keypress():
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
+
 def scale_value(value, old_min, old_max, new_min, new_max):
     # Scale the value from the old range to the new range
     old_range = old_max - old_min
     new_range = new_max - new_min
     scaled_value = (((value - old_min) * new_range) / old_range) + new_min
-    
+
     return scaled_value
- 
+
+
 def ps3_walk():
     global current_speed
     global idle_z
@@ -460,7 +506,7 @@ def ps3_walk():
                 elif button == 6:
                     height_down = True
                     # time.sleep(0.1)
-            
+
                 elif button == 13:
                     if current_speed == Speed.SLOW:
                         current_speed = Speed.MEDIUM
@@ -486,7 +532,7 @@ def ps3_walk():
                     height_up = False
                 elif button == 6:
                     height_down = False
-                    
+
             elif event.type == pygame.JOYAXISMOTION:
                 x = joystick.get_axis(0)
                 y = -joystick.get_axis(1)
@@ -518,19 +564,16 @@ def ps3_walk():
         if current_motion is not None:
             x, y, r = current_motion
             # print(f"x: {x}, y: {y}, r: {r}")
-            if round(x, 1) == 0 and round(y, 1) == 0 and (round(r, 2) < 0.2 and round(r,2) > -0.2):
+            if round(x, 1) == 0 and round(y, 1) == 0 and (round(r, 2) < 0.2 and round(r, 2) > -0.2):
                 pass
             else:
-                #map joystick values to the range [-0.1, 0.1] and adapt speed
+                # map joystick values to the range [-0.1, 0.1] and adapt speed
                 x = x * 0.1 * current_speed.value
                 y = y * 0.1 * current_speed.value
                 r = r * 0.1 * 2 * current_speed.value
                 walk(time.time(), x, y, r)
-        
 
 
-
-    
 if __name__ == "__main__":
     print("N'exécutez pas ce fichier, mais simulator.py")
     # if enable_real:
@@ -549,7 +592,7 @@ if __name__ == "__main__":
                 portHandler.setBaudRate(1000000)
                 packetHandler = PacketHandler(1.0)
             except:
-                if index == len(usb_port)-1 :
+                if index == len(usb_port) - 1:
                     print("None of the ports are connected")
                     exit()
                 else:
@@ -558,7 +601,6 @@ if __name__ == "__main__":
             else:
                 print(f"port {port} connected")
                 break
-            
 
     ADDR_GOAL_POSITION = 30
 
@@ -574,8 +616,7 @@ if __name__ == "__main__":
         exit()
     # for id in ids:
     #     packetHandler.write2ByteTxRx(portHandler, id, ADDR_GOAL_POSITION, 512)
-    
+
     # key = None
     # threading.Thread(target=detect_keypress).start()
     ps3_walk()
-
