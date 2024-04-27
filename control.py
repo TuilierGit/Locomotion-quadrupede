@@ -326,7 +326,10 @@ def walk(t, speed_x, speed_y, speed_rotation):
         cur_t = 0
         trans_points.append([cur_t] + trans_point1.tolist())
 
-        cur_t += ground_time
+        cur_t += ground_time / 2
+        trans_points.append([cur_t] + air.tolist())
+
+        cur_t += ground_time / 2
         trans_points.append([cur_t] + trans_point2.tolist())
 
         cur_t += ground_time / 2
